@@ -1,0 +1,17 @@
+{
+    "debug.onTaskErrors": "abort",
+    "json.schemas": [
+        {
+            "fileMatch": [
+                "/aad.*.json"
+            ],
+            "schema": {}
+        }
+    ],
+    "terminal.integrated.env.windows": {
+        "PATH": "C:\\Users\\sandervd\\.azurelogicapps\\dependencies\\DotNetSDK;${env:PATH}"
+    },
+    "omnisharp.dotNetCliPaths": [
+        "C:\\Users\\sandervd\\.azurelogicapps\\dependencies\\DotNetSDK"
+    ]
+}

@@ -1,0 +1,8 @@
+Generate one attractive Adaptive Card for the below JSON. If there is no JSON data or no JSON object, always generate a small card that show there is no data available.
+
+Do not add any extra fields.
+Fill in the values so it is ready to sent. Do not use placeholders.
+If JSON has an Array show the array with columns sets where each column has same width.
+You are code creator so only return the JSON, do not explain.
+
+JSON:
