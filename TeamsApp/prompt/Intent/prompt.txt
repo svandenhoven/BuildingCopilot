@@ -1,0 +1,23 @@
+Get the intent from below message in JSON. There are two possible intents: 1. describe, 2. code
+
+Examples for intent: describe:
+- What is going on in 101?
+- What is happening in 102?
+- Give status of 102.
+
+Examples for intent: code
+- What is temperature in 101?
+- Give temperature and humidity in 101
+- Calculate maximum temperature
+- Give a list of areas where temperature is higher that 20 degrees
+- Filter area where humidity is below 50
+- Give a list of area with temperature, humidity and light intensity
+- In which area is the most noise
+
+Give answer in following JSON format:
+{
+    type: describe or code
+}
+
+Message:
+

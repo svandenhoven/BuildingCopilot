@@ -22,10 +22,17 @@ export class TeamsBot extends TeamsActivityHandler {
 
     this.onMessage(async (context, next) => {
 
-      if (context.activity.text.includes('funny') || context.activity.text.includes('description') || context.activity.text.includes('going on')) {
-        await this.GenerateAreaDescription(context, this.endpoint, this.azureApiKey);
-      } else {
-        await this.GenerateCodedAnswer(context, this.endpoint, this.azureApiKey);
+      const intent = await this.getIntent(context);
+      switch (intent.type.toLowerCase()) {
+        case 'describe':
+          await this.GenerateAreaDescription(context, this.endpoint, this.azureApiKey);
+          break;
+        case 'code':
+          await this.GenerateCodedAnswer(context, this.endpoint, this.azureApiKey);
+          break;
+        default:
+          await context.sendActivity(`I'm sorry, I don't know how to ${intent.type}.`);
+          break;
       }
       await next();
     });
@@ -42,6 +49,17 @@ export class TeamsBot extends TeamsActivityHandler {
       }
       await next();
     });
+  }
+
+  async getIntent(context: TurnContext): Promise<any> {
+    const prompt = this.genIntentPrompt(context.activity.text);
+    const messages = [
+      { role: "system", content: "You are a JSON generator. You only return JSON code." },
+      { role: "user", content: `${prompt}` },
+    ];
+
+    const intent = await this.ExecOpenAIPrompt(this.endpoint, this.azureApiKey, messages);
+    return JSON.parse(intent);
   }
 
   async GenerateCodedAnswer(context: TurnContext, endpoint: string, azureApiKey: string) {
@@ -112,7 +130,6 @@ export class TeamsBot extends TeamsActivityHandler {
       }
 
     } catch (error) {
-      console.error(error);
       context.sendActivity(`Could not perform the operation. Please try again with other phrase. ${error.message}`);
     }
   }
@@ -179,7 +196,7 @@ export class TeamsBot extends TeamsActivityHandler {
   }
 
   private genDescribePrompt(area: string) {
-    const filePath = 'prompt/describefunny/prompt.txt';
+    const filePath = 'prompt/describe/prompt.txt';
     let prompt = '';
 
     try {
@@ -188,6 +205,18 @@ export class TeamsBot extends TeamsActivityHandler {
       console.error(err);
     }
     return prompt + area;
+  }
+
+  private genIntentPrompt(message: string) {
+    const filePath = 'prompt/intent/prompt.txt';
+    let prompt = '';
+
+    try {
+      prompt = fs.readFileSync(filePath, 'utf8');
+    } catch (err) {
+      console.error(err);
+    }
+    return prompt + message;
   }
 
   async showTypingIndicator(context: TurnContext): Promise<void> {
