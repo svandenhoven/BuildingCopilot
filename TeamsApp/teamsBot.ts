@@ -10,114 +10,23 @@ import fs from 'fs';
 import axios, { AxiosResponse } from 'axios';
 
 export class TeamsBot extends TeamsActivityHandler {
-  constructor() {
+  private endpoint: string;
+  private azureApiKey: string;
+  private pythonapiUrl: string;
+
+  constructor(  ) {
     super();
+    this.endpoint = process.env["AZURE_OPENAI_ENDPOINT"];
+    this.azureApiKey = process.env["AZURE_OPENAI_API_KEY"];
+    this.pythonapiUrl = process.env["PYTHONAPI"];
+
     this.onMessage(async (context, next) => {
-      const endpoint = process.env["AZURE_OPENAI_ENDPOINT"] ;
-      const azureApiKey = process.env["AZURE_OPENAI_API_KEY"] ;
 
       if (context.activity.text.includes('funny') || context.activity.text.includes('description') || context.activity.text.includes('going on')) {
-        await this.showTypingIndicator(context);
-
-        //Get areaId  from input
-        const mentionRegex = /<at>.*?<\/at>/g;
-        const text = context.activity.text.replace(mentionRegex, '');
-        const matched = text.match(/\d+/);
-        const area_id = matched ? Number(matched[0]) : null;
-        const execCodeUrl = `http://127.0.0.1:8000/area/${area_id}`
-        let response: AxiosResponse<any, any>;
-        try {
-          response = await axios.get(execCodeUrl, { headers: { 'Content-Type': 'application/json' }});
-          console.log(response.data);
-          const areaData = response.data;
-          const messages = [
-            { role: "system", content: "You are a funny tweet generator." },
-            { role: "user", content: `${this.genDescribePrompt(areaData)}` },
-          ];
-          const msg = await this.ExecOpenAIPrompt(endpoint, azureApiKey, messages);
-          await context.sendActivity(msg);
-        } catch (error) {
-          await context.sendActivity(`Could not perform the operation. Please try again with other phrase. `);
-        }
+        await this.GenerateAreaDescription(context, this.endpoint, this.azureApiKey);
       } else {
-      
-        try {
-          let genCodePrompt = this.genCodePrompt(context.activity.text);
-
-          const messages1 = [
-            { role: "system", content: "You are a Python code generator. You only return Python code." },
-            { role: "user", content: `${genCodePrompt}` },
-          ];
-
-          let result:any;
-          const nrRetry = 3;
-          for (let i = 0; i < nrRetry; i++) {
-            const msg1 = await this.ExecOpenAIPrompt(endpoint, azureApiKey, messages1);
-            console.log(msg1);
-
-            const matched1 = msg1.match(/{[\s\S]*}/);
-            const content1 = matched1 ? matched1[0] : '';
-
-            console.log(content1);
-
-            //await context.sendActivity(content1);
-
-            await this.showTypingIndicator(context);
-            const execCodeUrl = "http://127.0.0.1:8000/execute"
-            let response: AxiosResponse<any, any>;
-            try {
-              response = await axios.post(execCodeUrl, msg1, { headers: { 'Content-Type': 'application/json' }});
-              console.log(response.data.result);
-              result = response.data.result;
-              break;
-            } catch (error) {
-              await context.sendActivity(`Run ${i}. Could not perform the operation. Please try again with other phrase. `);
-              if (i == nrRetry)
-                return;
-            }
-            //await context.sendActivity(response.data.result);
-          }
-
-          const messages2 = [
-            { role: "system", content: "You are a JSON generator for Adaptive Cards." },
-            { role: "user", content: JSON.stringify(this.genAdaptiveCardPrompt(result))  },
-          ];
-
-          console.log(messages2);
-          await this.showTypingIndicator(context);
-          for (let i=0; i < nrRetry; i++) {
-            const msg2 = await this.ExecOpenAIPrompt(endpoint, azureApiKey, messages2);
-            console.log(msg2);
-
-            // retrieve the JSON from the response, and send it as an Adaptive Card
-            const matched = msg2.match(/{[\s\S]*}/);
-            const content = matched ? matched[0] : '';
-            if (matched) {
-              //console.log(content);
-              //await context.sendActivity(content);
-              try {
-              const cardPayload = JSON.parse(content);
-              await context.sendActivity({ attachments: [ { contentType: "application/vnd.microsoft.card.adaptive", content: cardPayload } ] });
-              break;
-              } catch (error) {
-                if (i == nrRetry) { 
-                  await context.sendActivity(`Could not parse the generated adaptive card. Please try again with other phrase.`);
-                  console.error(error);
-                } else {
-                  await context.sendActivity(`Retry generating adaptive card ${i}.`);
-                }
-              }
-            } else {
-              await context.sendActivity(`Could not perform the operation. Please try again with other phrase. ${msg2}`);
-            }
-          }
-
-        } catch (error) {
-          console.error(error);
-          context.sendActivity(`Could not perform the operation. Please try again with other phrase. ${error.message}`);
-        }
+        await this.GenerateCodedAnswer(context, this.endpoint, this.azureApiKey);
       }
-      // By calling next() you ensure that the next BotHandler is run.
       await next();
     });
 
@@ -125,14 +34,112 @@ export class TeamsBot extends TeamsActivityHandler {
       const membersAdded = context.activity.membersAdded;
       for (let cnt = 0; cnt < membersAdded.length; cnt++) {
         if (membersAdded[cnt].id) {
-          // await context.sendActivity(
-          //   `Hi there! I'm Building Copilot that will help you managing your building. `
-          // );
+          await context.sendActivity(
+            `Hi there! I'm Building Copilot that will help you managing your building. `
+          );
           break;
         }
       }
       await next();
     });
+  }
+
+  async GenerateCodedAnswer(context: TurnContext, endpoint: string, azureApiKey: string) {
+    try {
+      let genCodePrompt = this.genCodePrompt(context.activity.text);
+
+      const messages = [
+        { role: "system", content: "You are a Python code generator. You only return Python code." },
+        { role: "user", content: `${genCodePrompt}` },
+      ];
+
+      let result:any;
+      const nrRetry = 3;
+      for (let i = 0; i < nrRetry; i++) {
+        const generatedcode = await this.ExecOpenAIPrompt(endpoint, azureApiKey, messages);
+
+        const pyhton = JSON.parse(generatedcode);
+        context.sendActivity(`Generated code:\n\`\`\` python \n ${pyhton.code} \n \`\`\` `);
+
+        await this.showTypingIndicator(context);
+        const execCodeUrl = `${this.pythonapiUrl}/execute`;
+        let response: AxiosResponse<any, any>;
+        try {
+          response = await axios.post(execCodeUrl, generatedcode, { headers: { 'Content-Type': 'application/json' }});
+          console.log(response.data.result);
+          result = response.data.result;
+          break;
+        } catch (error) {
+          await context.sendActivity(`Run ${i}. Could not perform the operation. Please try again with other phrase. `);
+          if (i == nrRetry)
+            return;
+        }
+        //await context.sendActivity(response.data.result);
+      }
+
+      const messages2 = [
+        { role: "system", content: "You are a JSON generator for Adaptive Cards." },
+        { role: "user", content: JSON.stringify(this.genAdaptiveCardPrompt(result))  },
+      ];
+
+      console.log(messages2);
+      for (let i=0; i < nrRetry; i++) {
+        await this.showTypingIndicator(context);
+        const msg2 = await this.ExecOpenAIPrompt(endpoint, azureApiKey, messages2);
+        console.log(msg2);
+
+        // retrieve the JSON from the response, and send it as an Adaptive Card
+        const matched = msg2.match(/{[\s\S]*}/);
+        const content = matched ? matched[0] : '';
+        if (matched) {
+          //console.log(content);
+          //await context.sendActivity(content);
+          try {
+          const cardPayload = JSON.parse(content);
+          await context.sendActivity({ attachments: [ { contentType: "application/vnd.microsoft.card.adaptive", content: cardPayload } ] });
+          break;
+          } catch (error) {
+            if (i == nrRetry) { 
+              await context.sendActivity(`Could not parse the generated adaptive card. Please try again with other phrase.`);
+              console.error(error);
+            } else {
+              await context.sendActivity(`Retry generating adaptive card ${i}.`);
+            }
+          }
+        } else {
+          await context.sendActivity(`Could not perform the operation. Please try again with other phrase. ${msg2}`);
+        }
+      }
+
+    } catch (error) {
+      console.error(error);
+      context.sendActivity(`Could not perform the operation. Please try again with other phrase. ${error.message}`);
+    }
+  }
+
+  private async GenerateAreaDescription(context: TurnContext, endpoint: string, azureApiKey: string) {
+    await this.showTypingIndicator(context);
+
+    //Get areaId  from input
+    const mentionRegex = /<at>.*?<\/at>/g;
+    const text = context.activity.text.replace(mentionRegex, '');
+    const matched = text.match(/\d+/);
+    const area_id = matched ? Number(matched[0]) : null;
+    const execCodeUrl = `${this.pythonapiUrl}/area/${area_id}`;
+    let response: AxiosResponse<any, any>;
+    try {
+      response = await axios.get(execCodeUrl, { headers: { 'Content-Type': 'application/json' } });
+      console.log(response.data);
+      const areaData = response.data;
+      const messages = [
+        { role: "system", content: "You are a funny tweet generator." },
+        { role: "user", content: `${this.genDescribePrompt(areaData)}` },
+      ];
+      const msg = await this.ExecOpenAIPrompt(endpoint, azureApiKey, messages);
+      await context.sendActivity(msg);
+    } catch (error) {
+      await context.sendActivity(`Could not perform the operation. Please try again with other phrase. `);
+    }
   }
 
   private async ExecOpenAIPrompt(endpoint: string, azureApiKey: string, messages: { role: string; content: string; }[]) {
